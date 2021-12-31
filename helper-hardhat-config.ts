@@ -109,14 +109,14 @@ export const NETWORKS_CHAIN_ID: iParamsPerNetwork<number | "auto"> = {
 };
 
 export const BLOCK_TO_FORK = {
-  [eEthereumNetwork.main]: 13703745,
+  [eEthereumNetwork.main]: undefined, // 13703745
   [eEthereumNetwork.kovan]: undefined,
   [eEthereumNetwork.ropsten]: undefined,
   [eEthereumNetwork.rinkeby]: undefined,
   [eEthereumNetwork.goerli]: undefined,
   [eEthereumNetwork.hardhat]: undefined,
   [ePolygonNetwork.mumbai]: undefined,
-  [ePolygonNetwork.matic]: 21435710,
+  [ePolygonNetwork.matic]: undefined, //21435710
   [eXDaiNetwork.xdai]: undefined,
   [eAvalancheNetwork.avalanche]: undefined,
   [eAvalancheNetwork.fuji]: undefined,
