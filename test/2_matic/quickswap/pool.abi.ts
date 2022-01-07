@@ -1,5 +1,4 @@
-export const pool_address = "0x59153f27eefe07e5ece4f9304ebba1da6f53ca88";
-export const pool_abi = [
+export const POOL_ABI = [
   { inputs: [], payable: false, stateMutability: "nonpayable", type: "constructor" },
   {
     anonymous: false,
