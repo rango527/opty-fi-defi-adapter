@@ -4,10 +4,10 @@
 pragma solidity ^0.6.12;
 pragma experimental ABIEncoderV2;
 
-//  libraries
+// libraries
 import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 
-//  interfaces
+// interfaces
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IAdapter } from "@optyfi/defi-legos/interfaces/defiAdapters/contracts/IAdapter.sol";
 import { IAdapterInvestLimit, MaxExposure } from "@optyfi/defi-legos/interfaces/defiAdapters/contracts/IAdapterInvestLimit.sol";
