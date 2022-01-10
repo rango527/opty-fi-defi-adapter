@@ -13,6 +13,7 @@ import { IAdapter } from "@optyfi/defi-legos/interfaces/defiAdapters/contracts/I
 import { IAdapterInvestLimit, MaxExposure } from "@optyfi/defi-legos/interfaces/defiAdapters/contracts/IAdapterInvestLimit.sol";
 import { IUniswapV2Router02 } from "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import { IUniswapV2Pair } from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import { IUniswapV2Factory } from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import { Babylonian } from "@uniswap/lib/contracts/libraries/Babylonian.sol";
 import { UniswapV2Library } from "../../libraries/UniswapV2Library.sol";
 
@@ -26,6 +27,7 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
     using SafeMath for uint256;
 
     IUniswapV2Router02 public constant quickswapRouter = IUniswapV2Router02(0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff);
+    IUniswapV2Factory public constant factoryRouter = IUniswapV2Factory(0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32);
     mapping(address => mapping(address => uint256)) public maxDepositAmount;
     mapping(address => uint256) public maxDepositPoolPct;
     uint256 public maxDepositProtocolPct;
@@ -91,7 +93,7 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
         uint256 swapOutAmount = UniswapV2Library.getAmountOut(swapInAmount, reserve0, reserve1);
         reserve0 = reserve0.add(swapInAmount);
         reserve1 = reserve1.sub(swapOutAmount);
-        uint256 _totalSupply = IUniswapV2Pair(_liquidityPool).totalSupply();
+        uint256 _totalSupply = _getPoolTotalSupply(_liquidityPool, reserve0, reserve1);
         uint256 amount0Optimal = _depositAmount.sub(swapInAmount);
         uint256 amount1Optimal = UniswapV2Library.quote(amount0Optimal, reserve0, reserve1);
         if (amount1Optimal > swapOutAmount) {
@@ -235,7 +237,7 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
             );
             address toToken = IUniswapV2Pair(_liquidityPool).token1();
             (uint256 outAmountA, uint256 outAmountB, ) = IUniswapV2Pair(_liquidityPool).getReserves();
-            uint256 _totalSupply = IUniswapV2Pair(_liquidityPool).totalSupply();
+            uint256 _totalSupply = _getPoolTotalSupply(_liquidityPool, outAmountA, outAmountB);
             outAmountA = outAmountA.mul(_shares).div(_totalSupply);
             outAmountB = outAmountB.mul(_shares).div(_totalSupply);
             if (toToken == _underlyingToken) {
@@ -326,23 +328,19 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
         address _liquidityPool,
         uint256 _liquidityPoolTokenAmount
     ) public view override returns (uint256) {
-        uint256 _totalSupply = IUniswapV2Pair(_liquidityPool).totalSupply();
         (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(_liquidityPool).getReserves();
+        uint256 _totalSupply = _getPoolTotalSupply(_liquidityPool, reserve0, reserve1);
         if (IUniswapV2Pair(_liquidityPool).token0() != _underlyingToken) {
             (reserve0, reserve1) = (reserve1, reserve0);
         }
-        return
-            _totalSupply
-                .mul(
-                    _liquidityPoolTokenAmount.mul(3) +
-                        reserve0.mul(1997) +
-                        Babylonian.sqrt(
-                            (_liquidityPoolTokenAmount.mul(3) + reserve0.mul(1997)).mul(
-                                _liquidityPoolTokenAmount.mul(3) + reserve0.mul(1997)
-                            ) - _liquidityPoolTokenAmount.mul(reserve0).mul(4000000)
-                        )
-                )
-                .div(reserve0) / 2000;
+        uint256 underlyingTokenAmount = reserve0.mul(_liquidityPoolTokenAmount).div(_totalSupply);
+        uint256 swapTokenAmount = reserve1.mul(_liquidityPoolTokenAmount).div(_totalSupply);
+        uint256 swapOutAmount = UniswapV2Library.getAmountOut(
+            swapTokenAmount,
+            reserve1.sub(swapTokenAmount),
+            reserve0.sub(underlyingTokenAmount)
+        );
+        return underlyingTokenAmount + swapOutAmount;
     }
 
     /**
@@ -435,6 +433,34 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
                     _limitedAmount = totalAmount.mul(maxDepositProtocolPct) / DENOMINATOR;
                 } else {
                     _limitedAmount = _amount;
+                }
+            }
+        }
+    }
+
+    /**
+     * @dev Get the totalSupply of liquidty Pool
+     * @param _liquidityPool Liquidity pool's contract address
+     * @param _reserve0 reserve value of token0
+     * @param _reserve1 reserve value of token1
+     * @return _totalSupply calculated totalSupply amount
+     */
+    function _getPoolTotalSupply(
+        address _liquidityPool,
+        uint256 _reserve0,
+        uint256 _reserve1
+    ) internal view returns (uint256 _totalSupply) {
+        _totalSupply = IUniswapV2Pair(_liquidityPool).totalSupply();
+        if (factoryRouter.feeTo() != address(0)) {
+            uint256 _kLast = IUniswapV2Pair(_liquidityPool).kLast();
+            if (_kLast != 0) {
+                uint256 rootK = Babylonian.sqrt(_reserve0.mul(_reserve1));
+                uint256 rootKLast = Babylonian.sqrt(_kLast);
+                if (rootK > rootKLast) {
+                    uint256 numerator = _totalSupply.mul(rootK.sub(rootKLast));
+                    uint256 denominator = rootK.mul(5).add(rootKLast);
+                    uint256 liquidity = numerator / denominator;
+                    if (liquidity > 0) _totalSupply += liquidity;
                 }
             }
         }

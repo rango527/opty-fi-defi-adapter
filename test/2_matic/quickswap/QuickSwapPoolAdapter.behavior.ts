@@ -4,7 +4,6 @@ import { solidity } from "ethereum-waffle";
 import { Network } from "@ethersproject/networks";
 import { getOverrideOptions } from "../../utils";
 import { ADDRESS, ABI } from "./quickSwapFactory";
-import { POOL_ABI } from "./pool.abi";
 import { TOKEN_ABI } from "./token.abi";
 
 chai.use(solidity);
@@ -14,8 +13,10 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
   token1Address: string,
   token2Name: string,
   token2Address: string,
+  underlyingTokenName: string,
+  underlyingTokenAddress: string,
 ): void {
-  it(`should ${token1Name} and ${token2Name}`, async function () {
+  it(`${token1Name} - ${token2Name} Pool Test - underlyingToken is ${underlyingTokenName}`, async function () {
     const matic: Network = {
       name: "matic",
       chainId: 137,
@@ -27,45 +28,61 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
 
     const pool = await quickSwapFactory.getPair(token1Address, token2Address);
 
-    // quickSwap pool deposit vault instance
-    const quickSwapInstance = new hre.ethers.Contract(pool, POOL_ABI, defaultProvider);
-
     // underlying token and instance
-    const underlyingToken: string = await quickSwapInstance.token0();
+    const underlyingToken: string = underlyingTokenAddress;
     const tokenInstance = new hre.ethers.Contract(underlyingToken, TOKEN_ABI, defaultProvider);
     const decimals = await tokenInstance.decimals();
-    const underlyingTokenInstance = await hre.ethers.getContractAt("IERC20", underlyingToken);
     await this.quickSwapPoolAdapter.connect(this.qsigners.deployer).setMaxDepositProtocolMode(0, getOverrideOptions());
     await this.quickSwapPoolAdapter
       .connect(this.qsigners.deployer)
-      .setMaxDepositAmount(pool, underlyingToken, hre.ethers.utils.parseUnits("1000", decimals), getOverrideOptions());
+      .setMaxDepositAmount(pool, underlyingToken, hre.ethers.utils.parseUnits("100", decimals), getOverrideOptions());
 
     // 1. deposit some underlying tokens
-    // assert whether the some amount in token is as expected or not after depositing
-    const expectAmount = await this.quickSwapPoolAdapter.calculateAmountInLPToken(
+    let underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+    const someDepositAmount = underlyingTokenBalance.div(2);
+
+    let expectAmount = await this.quickSwapPoolAdapter.calculateAmountInLPToken(
       underlyingToken,
       pool,
-      hre.ethers.utils.parseUnits("10", decimals),
+      someDepositAmount,
       getOverrideOptions(),
     );
-    console.log("expectAmount", expectAmount.toString());
 
     await this.testDeFiAdapter.testGetDepositSomeCodes(
       underlyingToken,
       pool,
       this.quickSwapPoolAdapter.address,
-      hre.ethers.utils.parseUnits("10", decimals),
+      someDepositAmount,
       getOverrideOptions(),
     );
+
     const actualAmount = await this.quickSwapPoolAdapter.getLiquidityPoolTokenBalance(
       this.testDeFiAdapter.address,
+      this.testDeFiAdapter.address, // placeholder of type address
       pool,
-      pool,
-      getOverrideOptions(),
     );
-    console.log("actualAmount", actualAmount.toString());
+
+    expect(expectAmount).to.be.eq(actualAmount);
 
     // 2. deposit all underlying tokens
+    underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+    expectAmount = await this.quickSwapPoolAdapter.calculateAmountInLPToken(
+      underlyingToken,
+      pool,
+      underlyingTokenBalance,
+      getOverrideOptions(),
+    );
+    const actualAmountBeforeAllDeposit = await this.quickSwapPoolAdapter.getLiquidityPoolTokenBalance(
+      this.testDeFiAdapter.address,
+      this.testDeFiAdapter.address, // placeholder of type address
+      pool,
+    );
     await this.testDeFiAdapter.testGetDepositAllCodes(
       underlyingToken,
       pool,
@@ -73,26 +90,28 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
       getOverrideOptions(),
     );
 
-    // 2.1 assert whether underlying token balance is as expected or not after deposit
-    const actualUnderlyingTokenBalanceAfterDeposit = await this.testDeFiAdapter.getERC20TokenBalance(
-      (
-        await this.quickSwapPoolAdapter.getUnderlyingTokens(pool, pool)
-      )[0],
-      this.testDeFiAdapter.address,
-    );
-    const expectedUnderlyingTokenBalanceAfterDeposit = await underlyingTokenInstance.balanceOf(
-      this.testDeFiAdapter.address,
-    );
-
-    expect(actualUnderlyingTokenBalanceAfterDeposit).to.be.eq(expectedUnderlyingTokenBalanceAfterDeposit);
-
-    // 3. Withdraw some lpToken balance
-    const poolBalanceBeforeWithdraw = await this.quickSwapPoolAdapter.getLiquidityPoolTokenBalance(
+    const actualAmountAfterAllDeposit = await this.quickSwapPoolAdapter.getLiquidityPoolTokenBalance(
       this.testDeFiAdapter.address,
       this.testDeFiAdapter.address, // placeholder of type address
       pool,
     );
-    const withdrawAmount = poolBalanceBeforeWithdraw.div(2);
+
+    expect(expectAmount).to.be.eq(actualAmountAfterAllDeposit.sub(actualAmountBeforeAllDeposit));
+
+    // 3. Withdraw some lpToken balance
+    const lpTokenBalance = await this.quickSwapPoolAdapter.getLiquidityPoolTokenBalance(
+      this.testDeFiAdapter.address,
+      this.testDeFiAdapter.address, // placeholder of type address
+      pool,
+    );
+    const withdrawAmount = lpTokenBalance.div(2);
+    let expectSomeAmount = await this.quickSwapPoolAdapter.getSomeAmountInToken(underlyingToken, pool, withdrawAmount);
+
+    let tokenBalanceBeforeWithdraw = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+
     await this.testDeFiAdapter.testGetWithdrawSomeCodes(
       underlyingToken,
       pool,
@@ -101,16 +120,25 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
       getOverrideOptions(),
     );
 
-    // 3.1 assert whether lpToken balance is as expected or not
-    const poolBalanceAfterWithdraw = await this.quickSwapPoolAdapter.getLiquidityPoolTokenBalance(
+    let tokenBalanceAfterWithdraw = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
       this.testDeFiAdapter.address,
-      this.testDeFiAdapter.address, // placeholder of type address
+    );
+
+    expect(expectSomeAmount).to.be.eq(tokenBalanceAfterWithdraw.sub(tokenBalanceBeforeWithdraw));
+
+    // 4. Withdraw all lpToken balance
+    expectSomeAmount = await this.quickSwapPoolAdapter.getAllAmountInToken(
+      this.testDeFiAdapter.address,
+      underlyingToken,
       pool,
     );
 
-    expect(poolBalanceBeforeWithdraw.sub(poolBalanceAfterWithdraw)).to.be.eq(withdrawAmount);
+    tokenBalanceBeforeWithdraw = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
 
-    // 4. Withdraw all lpToken balance
     await this.testDeFiAdapter.testGetWithdrawAllCodes(
       underlyingToken,
       pool,
@@ -118,29 +146,11 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
       getOverrideOptions(),
     );
 
-    // 4.1 assert whether lpToken balance is as expected or not
-    const actualLPTokenBalanceAfterWithdraw = await this.quickSwapPoolAdapter.getLiquidityPoolTokenBalance(
-      this.testDeFiAdapter.address,
-      this.testDeFiAdapter.address, // placeholder of type address
-      pool,
-    );
-
-    expect(actualLPTokenBalanceAfterWithdraw).to.be.eq(0);
-
-    const expectedLPTokenBalanceAfterWithdraw = await quickSwapInstance.balanceOf(this.testDeFiAdapter.address);
-    expect(actualLPTokenBalanceAfterWithdraw).to.be.eq(expectedLPTokenBalanceAfterWithdraw);
-
-    // 4.2 assert whether underlying token balance is as expected or not after withdraw
-    const actualUnderlyingTokenBalanceAfterWithdraw = await this.testDeFiAdapter.getERC20TokenBalance(
-      (
-        await this.quickSwapPoolAdapter.getUnderlyingTokens(pool, pool)
-      )[0],
-      this.testDeFiAdapter.address,
-    );
-    const expectedUnderlyingTokenBalanceAfterWithdraw = await underlyingTokenInstance.balanceOf(
+    tokenBalanceAfterWithdraw = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
       this.testDeFiAdapter.address,
     );
 
-    expect(actualUnderlyingTokenBalanceAfterWithdraw).to.be.eq(expectedUnderlyingTokenBalanceAfterWithdraw);
+    expect(expectSomeAmount).to.be.eq(tokenBalanceAfterWithdraw.sub(tokenBalanceBeforeWithdraw));
   }).timeout(100000);
 }

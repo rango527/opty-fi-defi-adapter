@@ -79,29 +79,54 @@ describe("Unit tests", function () {
       await deployContract(this.qsigners.deployer, quickSwapAdapterArtifact, [], getOverrideOptions())
     );
 
-    // fund TestDeFiAdapter with 10000 tokens each
+    // fund TestDeFiAdapter with 100 tokens each USD and 0.2 tokens each BTC
     await dai.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseEther("100"), getOverrideOptions());
-    console.log("dai");
     await usdc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("100", 6), getOverrideOptions());
-    console.log("usdc");
     await usdt.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("100", 6), getOverrideOptions());
-    console.log("usdt");
-    await wbtc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("100", 8), getOverrideOptions());
-    console.log("wbtc");
+    await wbtc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("0.4", 8), getOverrideOptions());
     await pbtc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseEther("0.4"), getOverrideOptions());
-    console.log("pbtc");
   });
 
   describe("QuickSwapPoolAdapter", function () {
     for (let i = 0; i < USD.length - 1; i++) {
       for (let j = i + 1; j < USD.length; j++) {
-        shouldBehaveLikeQuickSwapPoolAdapter(USD[i].name, USD[i].address, USD[j].name, USD[j].address);
+        shouldBehaveLikeQuickSwapPoolAdapter(
+          USD[i].name,
+          USD[i].address,
+          USD[j].name,
+          USD[j].address,
+          USD[i].name,
+          USD[i].address,
+        );
+        shouldBehaveLikeQuickSwapPoolAdapter(
+          USD[i].name,
+          USD[i].address,
+          USD[j].name,
+          USD[j].address,
+          USD[j].name,
+          USD[j].address,
+        );
       }
     }
 
     for (let i = 0; i < BTC.length - 1; i++) {
       for (let j = i + 1; j < BTC.length; j++) {
-        shouldBehaveLikeQuickSwapPoolAdapter(BTC[i].name, BTC[i].address, BTC[j].name, BTC[j].address);
+        shouldBehaveLikeQuickSwapPoolAdapter(
+          BTC[i].name,
+          BTC[i].address,
+          BTC[j].name,
+          BTC[j].address,
+          BTC[i].name,
+          BTC[i].address,
+        );
+        shouldBehaveLikeQuickSwapPoolAdapter(
+          BTC[i].name,
+          BTC[i].address,
+          BTC[j].name,
+          BTC[j].address,
+          BTC[j].name,
+          BTC[j].address,
+        );
       }
     }
   });
