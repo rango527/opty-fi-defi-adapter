@@ -91,12 +91,12 @@ describe("Unit tests", function () {
       ...getOverrideOptions(),
     });
 
-    // fund TestDeFiAdapter with 100 tokens each USD and 0.4 tokens each BTC
+    // fund TestDeFiAdapter with 100 tokens each USD and 0.1 tokens each BTC
     await dai.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseEther("100"), getOverrideOptions());
     await usdc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("100", 6), getOverrideOptions());
     await usdt.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("100", 6), getOverrideOptions());
-    await wbtc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("0.4", 8), getOverrideOptions());
-    await pbtc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseEther("0.4"), getOverrideOptions());
+    await wbtc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("0.1", 8), getOverrideOptions());
+    await pbtc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseEther("0.1"), getOverrideOptions());
   });
 
   describe("QuickSwapPoolAdapter", function () {
