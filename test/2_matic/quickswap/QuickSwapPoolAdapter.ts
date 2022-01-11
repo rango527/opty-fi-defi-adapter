@@ -20,11 +20,11 @@ describe("Unit tests", function () {
     const WBTC_ADDRESS: string = getAddress("0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6");
     const PBTC_ADDRESS: string = getAddress("0xd7ecf95cf7ef5256990beaf4ac895cd9e64cb947");
 
-    const DAI_WHALE: string = getAddress("0xBA12222222228d8Ba445958a75a0704d566BF2C8");
-    const USDT_WHALE: string = getAddress("0xBA12222222228d8Ba445958a75a0704d566BF2C8");
-    const USDC_WHALE: string = getAddress("0xBA12222222228d8Ba445958a75a0704d566BF2C8");
-    const WBTC_WHALE: string = getAddress("0xBA12222222228d8Ba445958a75a0704d566BF2C8");
-    const PBTC_WHALE: string = getAddress("0x5fDAEf0a0B11774dB68C38aB36957De8646aF1B5");
+    const DAI_WHALE: string = getAddress("0x0d0707963952f2fba59dd06f2b425ace40b492fe");
+    const USDT_WHALE: string = getAddress("0x0d0707963952f2fba59dd06f2b425ace40b492fe");
+    const USDC_WHALE: string = getAddress("0x0d0707963952f2fba59dd06f2b425ace40b492fe");
+    const WBTC_WHALE: string = getAddress("0x5fdaef0a0b11774db68c38ab36957de8646af1b5");
+    const PBTC_WHALE: string = getAddress("0x5fdaef0a0b11774db68c38ab36957de8646af1b5");
 
     const signers: SignerWithAddress[] = await hre.ethers.getSigners();
 
@@ -79,7 +79,19 @@ describe("Unit tests", function () {
       await deployContract(this.qsigners.deployer, quickSwapAdapterArtifact, [], getOverrideOptions())
     );
 
-    // fund TestDeFiAdapter with 100 tokens each USD and 0.2 tokens each BTC
+    // fund the whale's wallet with gas
+    await this.qsigners.admin.sendTransaction({
+      to: DAI_WHALE,
+      value: hre.ethers.utils.parseEther("1"),
+      ...getOverrideOptions(),
+    });
+    await this.qsigners.admin.sendTransaction({
+      to: WBTC_WHALE,
+      value: hre.ethers.utils.parseEther("1"),
+      ...getOverrideOptions(),
+    });
+
+    // fund TestDeFiAdapter with 100 tokens each USD and 0.4 tokens each BTC
     await dai.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseEther("100"), getOverrideOptions());
     await usdc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("100", 6), getOverrideOptions());
     await usdt.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("100", 6), getOverrideOptions());
