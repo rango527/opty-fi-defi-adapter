@@ -1,15 +1,11 @@
 // solhint-disable no-unused-vars
 // SPDX-License-Identifier: agpl-3.0
 
-pragma solidity ^0.6.12;
-pragma experimental ABIEncoderV2;
+pragma solidity =0.8.11;
 
 /////////////////////////////////////////////////////
 /// PLEASE DO NOT USE THIS CONTRACT IN PRODUCTION ///
 /////////////////////////////////////////////////////
-
-//  libraries
-import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 
 //  interfaces
 import { IHarvestDeposit } from "@optyfi/defi-legos/ethereum/harvest.finance/contracts/IHarvestDeposit.sol";
@@ -27,8 +23,6 @@ import { IUniswapV2Router02 } from "@uniswap/v2-periphery/contracts/interfaces/I
  */
 
 contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaking {
-    using SafeMath for uint256;
-
     /** @notice Maps liquidityPool to staking vault */
     mapping(address => address) public liquidityPoolToStakingVault;
 
@@ -72,7 +66,7 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
     /** @notice Harvest.finance's reward token address */
     address public constant rewardToken = address(0xa0246c9032bC3A600820415aE600c6388619A14D);
 
-    constructor() public {
+    constructor() {
         liquidityPoolToStakingVault[TBTC_SBTC_CRV_DEPOSIT_POOL] = TBTC_SBTC_CRV_STAKE_VAULT;
         liquidityPoolToStakingVault[THREE_CRV_DEPOSIT_POOL] = THREE_CRV_STAKE_VAULT;
         liquidityPoolToStakingVault[YDAI_YUSDC_YUSDT_YTUSD_DEPOSIT_POOL] = YDAI_YUSDC_YUSDT_YTUSD_STAKE_VAULT;
@@ -135,9 +129,8 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
         uint256 _depositAmount
     ) public view override returns (uint256) {
         return
-            _depositAmount.mul(10**IHarvestDeposit(_liquidityPool).decimals()).div(
-                IHarvestDeposit(_liquidityPool).getPricePerFullShare()
-            );
+            (_depositAmount * (10**IHarvestDeposit(_liquidityPool).decimals())) /
+            (IHarvestDeposit(_liquidityPool).getPricePerFullShare());
     }
 
     /**
@@ -152,7 +145,7 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
         uint256 _liquidityPoolTokenBalance = getLiquidityPoolTokenBalance(_vault, _underlyingToken, _liquidityPool);
         uint256 _balanceInToken = getAllAmountInToken(_vault, _underlyingToken, _liquidityPool);
         // can have unintentional rounding errors
-        _amount = (_liquidityPoolTokenBalance.mul(_redeemAmount)).div(_balanceInToken).add(1);
+        _amount = (_liquidityPoolTokenBalance * (_redeemAmount)) / (_balanceInToken) + (1);
     }
 
     /**
@@ -197,7 +190,7 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
     /**
      * @inheritdoc IAdapter
      */
-    function canStake(address) public view override returns (bool) {
+    function canStake(address) public pure override returns (bool) {
         return true;
     }
 
@@ -239,7 +232,7 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
         uint256 _liquidityPoolTokenBalance = IHarvestFarm(_stakingVault).balanceOf(_vault);
         uint256 _balanceInToken = getAllAmountInTokenStake(_vault, _underlyingToken, _liquidityPool);
         // can have unintentional rounding errors
-        _amount = (_liquidityPoolTokenBalance.mul(_redeemAmount)).div(_balanceInToken).add(1);
+        _amount = (_liquidityPoolTokenBalance * (_redeemAmount)) / (_balanceInToken) + (1);
     }
 
     /**
@@ -275,7 +268,7 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
         address _underlyingToken,
         address _liquidityPool,
         uint256 _amount
-    ) public view override returns (bytes[] memory _codes) {
+    ) public pure override returns (bytes[] memory _codes) {
         if (_amount > 0) {
             _codes = new bytes[](3);
             _codes[0] = abi.encode(
@@ -298,7 +291,7 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
         address _underlyingToken,
         address _liquidityPool,
         uint256 _shares
-    ) public view override returns (bytes[] memory _codes) {
+    ) public pure override returns (bytes[] memory _codes) {
         if (_shares > 0) {
             _codes = new bytes[](1);
             _codes[0] = abi.encode(
@@ -318,7 +311,7 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
     /**
      * @inheritdoc IAdapter
      */
-    function getLiquidityPoolToken(address, address _liquidityPool) public view override returns (address) {
+    function getLiquidityPoolToken(address, address _liquidityPool) public pure override returns (address) {
         return _liquidityPool;
     }
 
@@ -358,9 +351,9 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
         uint256 _liquidityPoolTokenAmount
     ) public view override returns (uint256) {
         if (_liquidityPoolTokenAmount > 0) {
-            _liquidityPoolTokenAmount = _liquidityPoolTokenAmount
-                .mul(IHarvestDeposit(_liquidityPool).getPricePerFullShare())
-                .div(10**IHarvestDeposit(_liquidityPool).decimals());
+            _liquidityPoolTokenAmount =
+                (_liquidityPoolTokenAmount * (IHarvestDeposit(_liquidityPool).getPricePerFullShare())) /
+                (10**IHarvestDeposit(_liquidityPool).decimals());
         }
         return _liquidityPoolTokenAmount;
     }
@@ -368,7 +361,7 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
     /**
      * @inheritdoc IAdapter
      */
-    function getRewardToken(address) public view override returns (address) {
+    function getRewardToken(address) public pure override returns (address) {
         return rewardToken;
     }
 
@@ -456,13 +449,13 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
         address _stakingVault = liquidityPoolToStakingVault[_liquidityPool];
         uint256 b = IHarvestFarm(_stakingVault).balanceOf(_vault);
         if (b > 0) {
-            b = b.mul(IHarvestDeposit(_liquidityPool).getPricePerFullShare()).div(
-                10**IHarvestDeposit(_liquidityPool).decimals()
-            );
+            b =
+                (b * (IHarvestDeposit(_liquidityPool).getPricePerFullShare())) /
+                (10**IHarvestDeposit(_liquidityPool).decimals());
         }
         uint256 _unclaimedReward = getUnclaimedRewardTokenAmount(_vault, _liquidityPool, _underlyingToken);
         if (_unclaimedReward > 0) {
-            b = b.add(_getRewardBalanceInUnderlyingTokens(rewardToken, _underlyingToken, _unclaimedReward));
+            b = b + (_getRewardBalanceInUnderlyingTokens(rewardToken, _underlyingToken, _unclaimedReward));
         }
         return b;
     }
@@ -533,7 +526,7 @@ contract HarvestFinanceAdapter is IAdapter, IAdapterHarvestReward, IAdapterStaki
                         uint256(0),
                         _getPath(_rewardToken, _underlyingToken),
                         _vault,
-                        uint256(-1)
+                        type(uint256).max
                     )
                 );
             }

@@ -7,18 +7,18 @@ import { TestDeFiAdapter } from "../../../typechain/TestDeFiAdapter";
 import { getOverrideOptions } from "../../utils";
 import { Signers } from "../types";
 import { shouldBehaveLikeQuickSwapPoolAdapter } from "./QuickSwapPoolAdapter.behavior";
-import { USD, BTC } from "./token.address";
+import { USD, BTC } from "../token.address";
 
 const { deployContract } = hre.waffle;
 
 describe("Unit tests", function () {
   before(async function () {
     this.qsigners = {} as Signers;
-    const DAI_ADDRESS: string = getAddress("0x8f3cf7ad23cd3cadbd9735aff958023239c6a063");
-    const USDT_ADDRESS: string = getAddress("0xc2132d05d31c914a87c6611c10748aeb04b58e8f");
-    const USDC_ADDRESS: string = getAddress("0x2791bca1f2de4661ed88a30c99a7a9449aa84174");
-    const WBTC_ADDRESS: string = getAddress("0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6");
-    const PBTC_ADDRESS: string = getAddress("0xd7ecf95cf7ef5256990beaf4ac895cd9e64cb947");
+    const DAI_ADDRESS: string = getAddress("0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063");
+    const USDT_ADDRESS: string = getAddress("0xc2132D05D31c914a87C6611C10748AEb04B58e8F");
+    const USDC_ADDRESS: string = getAddress("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174");
+    const WBTC_ADDRESS: string = getAddress("0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6");
+    const PBTC_ADDRESS: string = getAddress("0xd7ecf95Cf7eF5256990BeAf4ac895cD9e64cb947");
 
     const DAI_WHALE: string = getAddress("0x0d0707963952f2fba59dd06f2b425ace40b492fe");
     const USDT_WHALE: string = getAddress("0x0d0707963952f2fba59dd06f2b425ace40b492fe");
@@ -91,9 +91,9 @@ describe("Unit tests", function () {
       ...getOverrideOptions(),
     });
 
-    // fund TestDeFiAdapter with 100 tokens each USD and 0.1 tokens each BTC
-    await dai.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseEther("100"), getOverrideOptions());
-    await usdc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("100", 6), getOverrideOptions());
+    // fund TestDeFiAdapter with USD and BTC
+    await dai.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseEther("1000"), getOverrideOptions());
+    await usdc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("1000", 6), getOverrideOptions());
     await usdt.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("100", 6), getOverrideOptions());
     await wbtc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseUnits("0.1", 8), getOverrideOptions());
     await pbtc.transfer(this.testDeFiAdapter.address, hre.ethers.utils.parseEther("0.1"), getOverrideOptions());

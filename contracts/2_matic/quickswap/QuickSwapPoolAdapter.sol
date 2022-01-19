@@ -1,11 +1,7 @@
 // solhint-disable no-unused-vars
 // SPDX-License-Identifier: agpl-3.0
 
-pragma solidity ^0.6.12;
-pragma experimental ABIEncoderV2;
-
-// libraries
-import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
+pragma solidity =0.8.11;
 
 // interfaces
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -24,8 +20,9 @@ import { UniswapV2Library } from "../../libraries/UniswapV2Library.sol";
  */
 
 contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
-    using SafeMath for uint256;
-
+    /**
+     * @notice Uniswap V2 router contract address
+     */
     IUniswapV2Router02 public constant quickswapRouter = IUniswapV2Router02(0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff);
     IUniswapV2Factory public constant factoryRouter = IUniswapV2Factory(0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32);
     mapping(address => mapping(address => uint256)) public maxDepositAmount;
@@ -35,7 +32,7 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
     address public adjuster;
     uint256 public constant DENOMINATOR = 10000;
 
-    constructor() public {
+    constructor() {
         adjuster = msg.sender;
     }
 
@@ -91,18 +88,18 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
         }
         uint256 swapInAmount = _calculateSwapInAmount(reserve0, _depositAmount);
         uint256 swapOutAmount = UniswapV2Library.getAmountOut(swapInAmount, reserve0, reserve1);
-        reserve0 = reserve0.add(swapInAmount);
-        reserve1 = reserve1.sub(swapOutAmount);
+        reserve0 = reserve0 + swapInAmount;
+        reserve1 = reserve1 - swapOutAmount;
         uint256 _totalSupply = _getPoolTotalSupply(_liquidityPool, reserve0, reserve1);
-        uint256 amount0Optimal = _depositAmount.sub(swapInAmount);
+        uint256 amount0Optimal = _depositAmount - swapInAmount;
         uint256 amount1Optimal = UniswapV2Library.quote(amount0Optimal, reserve0, reserve1);
         if (amount1Optimal > swapOutAmount) {
             amount1Optimal = swapOutAmount;
             amount0Optimal = UniswapV2Library.quote(amount1Optimal, reserve1, reserve0);
         }
-        uint256 liquidity = (amount0Optimal).mul(_totalSupply) / reserve0;
-        if (liquidity > amount1Optimal.mul(_totalSupply) / reserve1) {
-            liquidity = amount1Optimal.mul(_totalSupply) / reserve1;
+        uint256 liquidity = (amount0Optimal * _totalSupply) / reserve0;
+        if (liquidity > (amount1Optimal * _totalSupply) / reserve1) {
+            liquidity = (amount1Optimal * _totalSupply) / reserve1;
         }
         return liquidity;
     }
@@ -118,7 +115,7 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
     ) public view override returns (uint256) {
         uint256 _liquidityPoolTokenBalance = getLiquidityPoolTokenBalance(_vault, _underlyingToken, _liquidityPool);
         uint256 _balanceInToken = getAllAmountInToken(_vault, _underlyingToken, _liquidityPool);
-        return _balanceInToken.mul(_redeemAmount).div(_liquidityPoolTokenBalance);
+        return (_liquidityPoolTokenBalance * _redeemAmount) / _balanceInToken + 1;
     }
 
     /**
@@ -138,7 +135,7 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
      * @inheritdoc IAdapter
      */
     // TODO: true/false?
-    function canStake(address) public view override returns (bool) {
+    function canStake(address) public pure override returns (bool) {
         return false;
     }
 
@@ -188,7 +185,7 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
                     0,
                     path,
                     _vault,
-                    uint256(-1)
+                    type(uint256).max
                 )
             );
             _codes[3] = abi.encode(
@@ -205,12 +202,12 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
                     "addLiquidity(address,address,uint256,uint256,uint256,uint256,address,uint256)",
                     _underlyingToken,
                     toToken,
-                    _amount.sub(swapInAmount),
+                    _amount - swapInAmount,
                     swapOutAmount,
                     0,
                     0,
                     _vault,
-                    uint256(-1)
+                    type(uint256).max
                 )
             );
         }
@@ -238,8 +235,8 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
             address toToken = IUniswapV2Pair(_liquidityPool).token1();
             (uint256 outAmountA, uint256 outAmountB, ) = IUniswapV2Pair(_liquidityPool).getReserves();
             uint256 _totalSupply = _getPoolTotalSupply(_liquidityPool, outAmountA, outAmountB);
-            outAmountA = outAmountA.mul(_shares).div(_totalSupply);
-            outAmountB = outAmountB.mul(_shares).div(_totalSupply);
+            outAmountA = (outAmountA * _shares) / _totalSupply;
+            outAmountB = (outAmountB * _shares) / _totalSupply;
             if (toToken == _underlyingToken) {
                 toToken = IUniswapV2Pair(_liquidityPool).token0();
                 (outAmountA, outAmountB) = (outAmountB, outAmountA);
@@ -254,7 +251,7 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
                     0,
                     0,
                     _vault,
-                    uint256(-1)
+                    type(uint256).max
                 )
             );
             _codes[3] = abi.encode(toToken, abi.encodeWithSignature("approve(address,uint256)", _liquidityPool, 0));
@@ -273,7 +270,7 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
                     0,
                     path,
                     _vault,
-                    uint256(-1)
+                    type(uint256).max
                 )
             );
         }
@@ -283,13 +280,13 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
      * @inheritdoc IAdapter
      */
     function getPoolValue(address _liquidityPool, address _underlyingToken) public view override returns (uint256) {
-        return IERC20(_underlyingToken).balanceOf(_liquidityPool).mul(2);
+        return IERC20(_underlyingToken).balanceOf(_liquidityPool) * 2;
     }
 
     /**
      * @inheritdoc IAdapter
      */
-    function getLiquidityPoolToken(address, address _liquidityPool) public view override returns (address) {
+    function getLiquidityPoolToken(address, address _liquidityPool) public pure override returns (address) {
         return _liquidityPool;
     }
 
@@ -333,12 +330,12 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
         if (IUniswapV2Pair(_liquidityPool).token0() != _underlyingToken) {
             (reserve0, reserve1) = (reserve1, reserve0);
         }
-        uint256 underlyingTokenAmount = reserve0.mul(_liquidityPoolTokenAmount).div(_totalSupply);
-        uint256 swapTokenAmount = reserve1.mul(_liquidityPoolTokenAmount).div(_totalSupply);
+        uint256 underlyingTokenAmount = (reserve0 * _liquidityPoolTokenAmount) / _totalSupply;
+        uint256 swapTokenAmount = (reserve1 * _liquidityPoolTokenAmount) / _totalSupply;
         uint256 swapOutAmount = UniswapV2Library.getAmountOut(
             swapTokenAmount,
-            reserve1.sub(swapTokenAmount),
-            reserve0.sub(underlyingTokenAmount)
+            reserve1 - swapTokenAmount,
+            reserve0 - underlyingTokenAmount
         );
         return underlyingTokenAmount + swapOutAmount;
     }
@@ -346,7 +343,7 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
     /**
      * @inheritdoc IAdapter
      */
-    function getRewardToken(address _liquidityPool) public view override returns (address) {
+    function getRewardToken(address _liquidityPool) public pure override returns (address) {
         return _liquidityPool;
     }
 
@@ -397,9 +394,7 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
      * @return Amount to swap of the deposit token
      */
     function _calculateSwapInAmount(uint256 reserveIn, uint256 userIn) internal pure returns (uint256) {
-        return
-            Babylonian.sqrt(reserveIn.mul(userIn.mul(3988000) + reserveIn.mul(3988009))).sub(reserveIn.mul(1997)) /
-            1994;
+        return (Babylonian.sqrt(reserveIn * (userIn * 3988000 + reserveIn * 3988009)) - (reserveIn * 1997)) / 1994;
     }
 
     /**
@@ -423,14 +418,14 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
         } else {
             uint256 totalAmount = getPoolValue(_liquidityPool, _underlyingToken);
             if (maxDepositPoolPct[_liquidityPool] > 0) {
-                if (_amount > totalAmount.mul(maxDepositPoolPct[_liquidityPool]) / DENOMINATOR) {
-                    _limitedAmount = totalAmount.mul(maxDepositPoolPct[_liquidityPool]) / DENOMINATOR;
+                if (_amount > (totalAmount * maxDepositPoolPct[_liquidityPool]) / DENOMINATOR) {
+                    _limitedAmount = (totalAmount * maxDepositPoolPct[_liquidityPool]) / DENOMINATOR;
                 } else {
                     _limitedAmount = _amount;
                 }
             } else if (maxDepositProtocolPct > 0) {
-                if (_amount > totalAmount.mul(maxDepositProtocolPct) / DENOMINATOR) {
-                    _limitedAmount = totalAmount.mul(maxDepositProtocolPct) / DENOMINATOR;
+                if (_amount > (totalAmount * maxDepositProtocolPct) / DENOMINATOR) {
+                    _limitedAmount = (totalAmount * maxDepositProtocolPct) / DENOMINATOR;
                 } else {
                     _limitedAmount = _amount;
                 }
@@ -454,11 +449,11 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
         if (factoryRouter.feeTo() != address(0)) {
             uint256 _kLast = IUniswapV2Pair(_liquidityPool).kLast();
             if (_kLast != 0) {
-                uint256 rootK = Babylonian.sqrt(_reserve0.mul(_reserve1));
+                uint256 rootK = Babylonian.sqrt(_reserve0 * _reserve1);
                 uint256 rootKLast = Babylonian.sqrt(_kLast);
                 if (rootK > rootKLast) {
-                    uint256 numerator = _totalSupply.mul(rootK.sub(rootKLast));
-                    uint256 denominator = rootK.mul(5).add(rootKLast);
+                    uint256 numerator = _totalSupply * (rootK - rootKLast);
+                    uint256 denominator = rootK * 5 + rootKLast;
                     uint256 liquidity = numerator / denominator;
                     if (liquidity > 0) _totalSupply += liquidity;
                 }
