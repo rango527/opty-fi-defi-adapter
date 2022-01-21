@@ -38,15 +38,13 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
     const farmAddress = await stakingRewardsFactory.stakingRewardsInfoByStakingToken(underlyingToken);
     const liquidityPool = farmAddress[0];
 
-    // const rewardsTokenAddress = await this.quickSwapFarmAdapter.getRewardToken(liquidityPool);
-    const farmInstance = await hre.ethers.getContractAt("IERC20", liquidityPool);
     const quickTokenAddress: string = getAddress("0x831753DD7087CaC61aB5644b308642cc1c33Dc13");
     const quickTokenInstance = await hre.ethers.getContractAt("IERC20", quickTokenAddress);
 
     await this.quickSwapFarmAdapter.connect(this.qsigners.deployer).setMaxDepositProtocolMode(0, getOverrideOptions());
     await this.quickSwapFarmAdapter
       .connect(this.qsigners.deployer)
-      .setMaxDepositAmount(pool, underlyingToken, hre.ethers.utils.parseEther("100"), getOverrideOptions());
+      .setMaxDepositAmount(pool, underlyingToken, hre.ethers.utils.parseEther("10000"), getOverrideOptions());
 
     // 1. Deposit Some underlying tokens
     const token1Balance = await this.testDeFiAdapter.getERC20TokenBalance(token1Address, this.qsigners.alice.address);
@@ -75,7 +73,7 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
         getOverrideOptions(),
       );
 
-    // 1.1 Transfer all amount of lpToken from test address to testDeFiAapter
+    // 1.1 transfer all amount of lpToken from test address to testDeFiAdapter
     let lpTokenAmount = await this.quickSwapFarmAdapter.getLiquidityPoolTokenBalance(
       this.qsigners.alice.address,
       underlyingToken,
@@ -89,25 +87,40 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
       underlyingToken, // placeholder of type address
     );
 
-    // 2. stake all lpTokens
-    await this.testDeFiAdapter.testGetDepositAllCodes(
+    // 2. Stake all lpTokens
+    const getPoolValueBeforeStake = await this.quickSwapFarmAdapter.getPoolValue(liquidityPool, underlyingToken);
+    const LPTokenBalanceBeforeStake = await this.quickSwapFarmAdapter.getLiquidityPoolTokenBalance(
+      this.testDeFiAdapter.address,
       underlyingToken,
-      liquidityPool,
-      this.quickSwapFarmAdapter.address,
-      getOverrideOptions(),
+      underlyingToken, // placeholder of type address
     );
 
-    // 2.1 assert whether the staked lpToken balance is as expected or not after staking lpToken
+    // assert whether the protocol can or not stake lpToken
+    const canStake = await this.quickSwapFarmAdapter.canStake(pool);
+    if (canStake) {
+      // stake all lpTokens
+      await this.testDeFiAdapter.testGetDepositAllCodes(
+        underlyingToken,
+        liquidityPool,
+        this.quickSwapFarmAdapter.address,
+        getOverrideOptions(),
+      );
+    }
+
+    // 2.1 assert whether the pool's totalSupply is as expected or not after staking lpToken
+    const getPoolValueAfterStake = await this.quickSwapFarmAdapter.getPoolValue(liquidityPool, underlyingToken);
+    expect(getPoolValueAfterStake).to.be.eq(getPoolValueBeforeStake.add(LPTokenBalanceBeforeStake));
+
+    // 2.2 assert whether the staked lpToken balance is as expected or not after staking lpToken
     const actualStakedLPTokenBalanceAfterStake = await this.quickSwapFarmAdapter.getLiquidityPoolTokenBalanceStake(
       this.testDeFiAdapter.address,
       this.testDeFiAdapter.address, // placeholder of type address
       liquidityPool,
     );
     const expectStakedLPTokenBalanceAfterStake = lpTokenAmount;
-
     expect(actualStakedLPTokenBalanceAfterStake).to.be.eq(expectStakedLPTokenBalanceAfterStake);
 
-    // 2.2 make a transaction for mining a block to get finite unclaimed reward amount
+    // 2.3 make a transaction for mining a block to get finite unclaimed reward amount
     await this.qsigners.admin.sendTransaction({
       value: hre.ethers.utils.parseEther("0"),
       to: await this.qsigners.admin.getAddress(),
@@ -115,7 +128,7 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
     });
 
     // Coverage Test
-    // 2.3 getAllAmountInToken
+    // 2.4 assert whether the underlyingToken balance is as expected or not before claim
     const expectUnderlyingTokenBalanceBeforeClaim = await this.quickSwapFarmAdapter.getAllAmountInToken(
       this.testDeFiAdapter.address,
       token1Address,
@@ -127,7 +140,7 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
     );
     expect(expectUnderlyingTokenBalanceBeforeClaim).to.be.eq(actualUnderlyingTokenBalanceBeforeClaim);
 
-    // 3. claim the reward token
+    // 3. Claim the reward token
     await this.testDeFiAdapter.testClaimRewardTokenCode(
       liquidityPool,
       this.quickSwapFarmAdapter.address,
@@ -142,7 +155,7 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
     const expectedRewardTokenBalanceAfterClaim = await quickTokenInstance.balanceOf(this.testDeFiAdapter.address);
     expect(actualRewardTokenBalanceAfterClaim).to.be.eq(expectedRewardTokenBalanceAfterClaim);
 
-    // 3.2 Underlying token balance
+    // 3.2 underlying token balance
     const expectUnderlyingTokenBalanceAfterHarvest = await this.quickSwapFarmAdapter.getAllAmountInToken(
       this.testDeFiAdapter.address,
       token1Address,
@@ -150,7 +163,7 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
     );
 
     // 3.3 Coverage Test
-    if (expectUnderlyingTokenBalanceAfterHarvest > 0) {
+    if (Number(expectUnderlyingTokenBalanceAfterHarvest) > 0) {
       const isRedeemableAmountSufficient = await this.quickSwapFarmAdapter.isRedeemableAmountSufficient(
         this.testDeFiAdapter.address,
         token1Address,
@@ -175,7 +188,7 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
       getOverrideOptions(),
     );
 
-    // 4.1 assert whether the reward token is swapped to underlying token or not
+    // 4.1 assert whether all reward token is swapped or not
     const actualRewardTokenBalanceAfterHarvest = await this.testDeFiAdapter.getERC20TokenBalance(
       quickTokenAddress,
       this.testDeFiAdapter.address,
@@ -183,7 +196,7 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
 
     expect(actualRewardTokenBalanceAfterHarvest).to.be.gte(0);
 
-    // 4.2 underlying token balance
+    // 4.2 assert whether the reward token is swapped to underlying token or not
     const actualUnderlyingTokenBalanceAfterHarvest = await this.testDeFiAdapter.getERC20TokenBalance(
       token1Address,
       this.testDeFiAdapter.address,
@@ -221,8 +234,15 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
     expect(expectedLPTokenBalanceAfterUnstake).to.be.eq(actualLPTokenBalanceAfterUnstake);
 
     // 6. Coverage Test True case
-    // 6.1 underlying token
-    const underlyingTokens = await this.quickSwapFarmAdapter.getUnderlyingTokens(underlyingToken, liquidityPool);
+    // 6.1 assert whether underlying token's address is correct or not
+    const underlyingTokens = await this.quickSwapFarmAdapter.getUnderlyingTokens(
+      // get lpToken address
+      await this.quickSwapFarmAdapter.getLiquidityPoolToken(
+        underlyingToken, // placeholder of type address
+        underlyingToken,
+      ),
+      liquidityPool, // placeholder of type address
+    );
     if (token1Address.toString() < token2Address.toString()) {
       expect(underlyingTokens[0]).to.be.eq(token1Address);
       expect(underlyingTokens[1]).to.be.eq(token2Address);
@@ -230,59 +250,26 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
       expect(underlyingTokens[0]).to.be.eq(token2Address);
       expect(underlyingTokens[1]).to.be.eq(token1Address);
     }
+
     // 6.2 calculateAmountInLPToken
     const calculateAmountInLPToken = await this.quickSwapFarmAdapter.calculateAmountInLPToken(
-      liquidityPool,
-      underlyingToken,
+      liquidityPool, // placeholder of type address
+      underlyingToken, // placeholder of type address
       100,
     );
     expect(calculateAmountInLPToken).to.be.eq(100);
-    // 6.3 canStake
-    const canStake = await this.quickSwapFarmAdapter.canStake(pool);
-    expect(canStake).to.be.eq(true);
-    // 6.4 setMaxDepositPoolPct and setMaxDepositProtocolPct
+
+    // set maxDepositPoolPct is 10%
     await this.quickSwapFarmAdapter
       .connect(this.qsigners.deployer)
       .setMaxDepositPoolPct(pool, 1000, getOverrideOptions());
+    // set maxDepositProtocolPct is 10%
     await this.quickSwapFarmAdapter
       .connect(this.qsigners.deployer)
       .setMaxDepositProtocolPct(1000, getOverrideOptions());
-    // getPoolValue
-    const getPoolValue = await this.quickSwapFarmAdapter.getPoolValue(liquidityPool, underlyingToken);
-    const farmTotalSupply = await farmInstance.totalSupply();
-    expect(getPoolValue).to.be.eq(farmTotalSupply);
-    // getAddLiquidityCodes
+    // call getAddLiquidityCodes function
     await this.quickSwapFarmAdapter.getAddLiquidityCodes(this.testDeFiAdapter.address, underlyingToken);
-    // getLiquidityPoolToken
-    const getLiquidityPoolToken = await this.quickSwapFarmAdapter.getLiquidityPoolToken(
-      underlyingToken,
-      underlyingToken,
-    );
-    expect(getLiquidityPoolToken).to.be.eq(underlyingToken);
-    // getHarvestSomeCodes
-    await this.testDeFiAdapter.testGetHarvestSomeCodes(
-      liquidityPool,
-      underlyingToken,
-      this.quickSwapFarmAdapter.address,
-      0,
-      getOverrideOptions(),
-    );
-
-    // 7. Coverage Test Fail case
-    await expect(
-      this.quickSwapFarmAdapter
-        .connect(this.qsigners.admin)
-        .setMaxDepositAmount(pool, underlyingToken, hre.ethers.utils.parseEther("100"), getOverrideOptions()),
-    ).to.be.revertedWith("Not adjuster");
-    await expect(
-      this.quickSwapFarmAdapter.connect(this.qsigners.admin).setMaxDepositPoolPct(pool, 1000, getOverrideOptions()),
-    ).to.be.revertedWith("Not adjuster");
-    await expect(
-      this.quickSwapFarmAdapter.connect(this.qsigners.admin).setMaxDepositProtocolPct(1000, getOverrideOptions()),
-    ).to.be.revertedWith("Not adjuster");
-    await expect(
-      this.quickSwapFarmAdapter.connect(this.qsigners.admin).setMaxDepositProtocolMode(0, getOverrideOptions()),
-    ).to.be.revertedWith("Not adjuster");
+    // assert whether deposit code when lpToken amount is 0
     await this.testDeFiAdapter.testGetDepositSomeCodes(
       underlyingToken,
       liquidityPool,
@@ -290,7 +277,15 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
       0,
       getOverrideOptions(),
     );
-    // when withdraw amount is 0
+    // assert whether harvest code when rewardToken amount is 0
+    await this.testDeFiAdapter.testGetHarvestSomeCodes(
+      liquidityPool,
+      underlyingToken,
+      this.quickSwapFarmAdapter.address,
+      0,
+      getOverrideOptions(),
+    );
+    // assert whether withdraw code when lpToken amount is 0
     await this.testDeFiAdapter.testGetWithdrawSomeCodes(
       underlyingToken,
       liquidityPool,
@@ -298,5 +293,25 @@ export function shouldBehaveLikeQuickSwapFarmAdapter(
       0,
       getOverrideOptions(),
     );
+
+    // 7. Coverage Test Fail case
+    // asserts whether the function caller is this contract's adjuster or not
+    await expect(
+      this.quickSwapFarmAdapter
+        .connect(this.qsigners.admin)
+        .setMaxDepositAmount(pool, underlyingToken, hre.ethers.utils.parseEther("100"), getOverrideOptions()),
+    ).to.be.revertedWith("Not adjuster");
+    // asserts whether the function caller is this contract's adjuster or not
+    await expect(
+      this.quickSwapFarmAdapter.connect(this.qsigners.admin).setMaxDepositPoolPct(pool, 1000, getOverrideOptions()),
+    ).to.be.revertedWith("Not adjuster");
+    // asserts whether the function caller is this contract's adjuster or not
+    await expect(
+      this.quickSwapFarmAdapter.connect(this.qsigners.admin).setMaxDepositProtocolPct(1000, getOverrideOptions()),
+    ).to.be.revertedWith("Not adjuster");
+    // asserts whether the function caller is this contract's adjuster or not
+    await expect(
+      this.quickSwapFarmAdapter.connect(this.qsigners.admin).setMaxDepositProtocolMode(0, getOverrideOptions()),
+    ).to.be.revertedWith("Not adjuster");
   }).timeout(100000);
 }

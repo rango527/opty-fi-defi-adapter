@@ -5,6 +5,7 @@ import { Network } from "@ethersproject/networks";
 import { getOverrideOptions } from "../../utils";
 import { ADDRESS, ABI } from "../quickSwapFactory";
 import { TOKEN_ABI } from "../token.abi";
+
 chai.use(solidity);
 
 export function shouldBehaveLikeQuickSwapPoolAdapter(
@@ -35,7 +36,7 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
     await this.quickSwapPoolAdapter.connect(this.qsigners.deployer).setMaxDepositProtocolMode(0, getOverrideOptions());
     await this.quickSwapPoolAdapter
       .connect(this.qsigners.deployer)
-      .setMaxDepositAmount(pool, underlyingToken, hre.ethers.utils.parseUnits("1000", decimals), getOverrideOptions());
+      .setMaxDepositAmount(pool, underlyingToken, hre.ethers.utils.parseUnits("10000", decimals), getOverrideOptions());
 
     // 1. deposit some underlying tokens
     let underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
@@ -106,7 +107,6 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
     );
     const withdrawAmount = lpTokenBalance.div(2);
     let expectSomeAmount = await this.quickSwapPoolAdapter.getSomeAmountInToken(underlyingToken, pool, withdrawAmount);
-
     let tokenBalanceBeforeWithdraw = await this.testDeFiAdapter.getERC20TokenBalance(
       underlyingToken,
       this.testDeFiAdapter.address,
@@ -170,7 +170,7 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
     expect(expectSomeAmount).to.be.eq(tokenBalanceAfterWithdraw.sub(tokenBalanceBeforeWithdraw));
 
     // 5. Coverage Test True case
-    // 5.1 underlying token
+    // 5.1 assert whether underlying token's address is correct or not
     const underlyingTokens = await this.quickSwapPoolAdapter.getUnderlyingTokens(pool, pool);
     if (token1Address.toString() < token2Address.toString()) {
       expect(underlyingTokens[0]).to.be.eq(token1Address);
@@ -180,38 +180,49 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
       expect(underlyingTokens[1]).to.be.eq(token1Address);
     }
 
-    // 5.2 canStake
+    // 5.2 assert whether the protocol can or not stake lpToken
     const canStake = await this.quickSwapPoolAdapter.canStake(pool);
     expect(canStake).to.be.eq(false);
 
-    // 5.3 getLiquidityPoolToken
+    // 5.3 assert whether lpToken address is same or not with rewardToken address
     const getLiquidityPoolToken = await this.quickSwapPoolAdapter.getLiquidityPoolToken(underlyingToken, pool);
-    // getRewardToken
     const getRewardToken = await this.quickSwapPoolAdapter.getRewardToken(pool);
     expect(getLiquidityPoolToken).to.be.eq(getRewardToken);
 
-    // 5.4 _getLimitedAmount
+    // 5.4 assert whether deposit amount is correct or not when deposit amount is more than max deposit amount
+    // set maxDepositAmount is 0.01
+    let setMaxDepositAmount = hre.ethers.utils.parseUnits("0.01", decimals);
+    await this.quickSwapPoolAdapter
+      .connect(this.qsigners.deployer)
+      .setMaxDepositAmount(pool, underlyingToken, setMaxDepositAmount, getOverrideOptions());
     underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
       underlyingToken,
       this.testDeFiAdapter.address,
     );
-    // _amount > maxDepositAmount
-    await this.quickSwapPoolAdapter
-      .connect(this.qsigners.deployer)
-      .setMaxDepositAmount(pool, underlyingToken, hre.ethers.utils.parseUnits("0.01", decimals), getOverrideOptions());
-    await this.testDeFiAdapter.testGetDepositSomeCodes(
+    await this.testDeFiAdapter.testGetDepositAllCodes(
       underlyingToken,
       pool,
       this.quickSwapPoolAdapter.address,
-      underlyingTokenBalance.div(10),
       getOverrideOptions(),
     );
-    // MaxExposure.Pct
+    let underlyingTokenBalanceAfterDeposit = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+    expect(underlyingTokenBalanceAfterDeposit).to.be.gte(underlyingTokenBalance.sub(setMaxDepositAmount));
+
+    // set maxDepositProtocolMode is Pct mode
     await this.quickSwapPoolAdapter.connect(this.qsigners.deployer).setMaxDepositProtocolMode(1, getOverrideOptions());
-    // maxDepositPoolPct > amount
+
+    // 5.5 assert whether deposit amount is correct or not when deposit amount is less than max deposit pool amount
+    // set max deposit pool percent is 10%
     await this.quickSwapPoolAdapter
       .connect(this.qsigners.deployer)
       .setMaxDepositPoolPct(pool, 1000, getOverrideOptions());
+    underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
     await this.testDeFiAdapter.testGetDepositSomeCodes(
       underlyingToken,
       pool,
@@ -219,62 +230,13 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
       underlyingTokenBalance.div(10),
       getOverrideOptions(),
     );
-    // maxDepositPoolPct < amount
-    await this.testDeFiAdapter.testGetWithdrawAllCodes(
+    underlyingTokenBalanceAfterDeposit = await this.testDeFiAdapter.getERC20TokenBalance(
       underlyingToken,
-      pool,
-      this.quickSwapPoolAdapter.address,
-      getOverrideOptions(),
+      this.testDeFiAdapter.address,
     );
-    await this.quickSwapPoolAdapter.connect(this.qsigners.deployer).setMaxDepositPoolPct(pool, 1, getOverrideOptions());
-    await this.testDeFiAdapter.testGetDepositAllCodes(
-      underlyingToken,
-      pool,
-      this.quickSwapPoolAdapter.address,
-      getOverrideOptions(),
-    );
-    // maxDepositProtocolPct
-    await this.testDeFiAdapter.testGetWithdrawAllCodes(
-      underlyingToken,
-      pool,
-      this.quickSwapPoolAdapter.address,
-      getOverrideOptions(),
-    );
-    // setMaxDepositPoolPct = 0
-    await this.quickSwapPoolAdapter.connect(this.qsigners.deployer).setMaxDepositPoolPct(pool, 0, getOverrideOptions());
-    await this.testDeFiAdapter.testGetDepositSomeCodes(
-      underlyingToken,
-      pool,
-      this.quickSwapPoolAdapter.address,
-      underlyingTokenBalance.div(10),
-      getOverrideOptions(),
-    );
-    // maxDepositProtocolPct > amount
-    await this.quickSwapPoolAdapter
-      .connect(this.qsigners.deployer)
-      .setMaxDepositProtocolPct(1000, getOverrideOptions());
-    await this.testDeFiAdapter.testGetDepositSomeCodes(
-      underlyingToken,
-      pool,
-      this.quickSwapPoolAdapter.address,
-      underlyingTokenBalance.div(10),
-      getOverrideOptions(),
-    );
-    // maxDepositProtocolPct < amount
-    await this.testDeFiAdapter.testGetWithdrawAllCodes(
-      underlyingToken,
-      pool,
-      this.quickSwapPoolAdapter.address,
-      getOverrideOptions(),
-    );
-    await this.quickSwapPoolAdapter.connect(this.qsigners.deployer).setMaxDepositProtocolPct(1, getOverrideOptions());
-    await this.testDeFiAdapter.testGetDepositAllCodes(
-      underlyingToken,
-      pool,
-      this.quickSwapPoolAdapter.address,
-      getOverrideOptions(),
-    );
-    // 5.5 All withdraw after some deposit
+    expect(underlyingTokenBalanceAfterDeposit).to.be.gte(underlyingTokenBalance.sub(underlyingTokenBalance.div(10)));
+
+    // All withdraw after deposit
     await this.testDeFiAdapter.testGetWithdrawAllCodes(
       underlyingToken,
       pool,
@@ -282,7 +244,132 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
       getOverrideOptions(),
     );
 
+    // 5.6 assert whether deposit amount is correct or not when deposit amount is more than max deposit pool amount
+    // set max deposit pool percent is 0.01%
+    await this.quickSwapPoolAdapter.connect(this.qsigners.deployer).setMaxDepositPoolPct(pool, 1, getOverrideOptions());
+    underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+    setMaxDepositAmount = await this.quickSwapPoolAdapter.getPoolValue(pool, underlyingToken);
+    await this.testDeFiAdapter.testGetDepositAllCodes(
+      underlyingToken,
+      pool,
+      this.quickSwapPoolAdapter.address,
+      getOverrideOptions(),
+    );
+    underlyingTokenBalanceAfterDeposit = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+    expect(underlyingTokenBalanceAfterDeposit).to.be.gte(underlyingTokenBalance.sub(setMaxDepositAmount));
+
+    // All withdraw after deposit
+    await this.testDeFiAdapter.testGetWithdrawAllCodes(
+      underlyingToken,
+      pool,
+      this.quickSwapPoolAdapter.address,
+      getOverrideOptions(),
+    );
+
+    // 5.7 assert whether deposit amount is correct or not when maxDepositPoolPct and maxDepositProtocolPct are 0%
+    // set maxDepositPoolPct is 0%
+    await this.quickSwapPoolAdapter.connect(this.qsigners.deployer).setMaxDepositPoolPct(pool, 0, getOverrideOptions());
+    // set maxDepositProtocolPct is 0%
+    await this.quickSwapPoolAdapter.connect(this.qsigners.deployer).setMaxDepositProtocolPct(0, getOverrideOptions());
+    underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+    await this.testDeFiAdapter.testGetDepositSomeCodes(
+      underlyingToken,
+      pool,
+      this.quickSwapPoolAdapter.address,
+      underlyingTokenBalance.div(10),
+      getOverrideOptions(),
+    );
+    underlyingTokenBalanceAfterDeposit = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+    expect(underlyingTokenBalanceAfterDeposit).to.be.gte(underlyingTokenBalance);
+
+    // 5.8 assert whether deposit amount is correct or not when deposit amount is less than max deposit protocol amount
+    // set maxDepositProtocolPct is 10%
+    await this.quickSwapPoolAdapter
+      .connect(this.qsigners.deployer)
+      .setMaxDepositProtocolPct(1000, getOverrideOptions());
+    underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+    await this.testDeFiAdapter.testGetDepositSomeCodes(
+      underlyingToken,
+      pool,
+      this.quickSwapPoolAdapter.address,
+      underlyingTokenBalance.div(10),
+      getOverrideOptions(),
+    );
+    underlyingTokenBalanceAfterDeposit = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+    expect(underlyingTokenBalanceAfterDeposit).to.be.gte(underlyingTokenBalance.sub(underlyingTokenBalance.div(10)));
+
+    await this.testDeFiAdapter.testGetWithdrawAllCodes(
+      underlyingToken,
+      pool,
+      this.quickSwapPoolAdapter.address,
+      getOverrideOptions(),
+    );
+
+    // 5.9 assert whether deposit amount is correct or not when deposit amount is more than max deposit protocol amount
+    // set maxDepositProtocolPct is 1%
+    await this.quickSwapPoolAdapter.connect(this.qsigners.deployer).setMaxDepositProtocolPct(1, getOverrideOptions());
+    underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+    setMaxDepositAmount = await this.quickSwapPoolAdapter.getPoolValue(pool, underlyingToken);
+    await this.testDeFiAdapter.testGetDepositAllCodes(
+      underlyingToken,
+      pool,
+      this.quickSwapPoolAdapter.address,
+      getOverrideOptions(),
+    );
+    underlyingTokenBalanceAfterDeposit = await this.testDeFiAdapter.getERC20TokenBalance(
+      underlyingToken,
+      this.testDeFiAdapter.address,
+    );
+    expect(underlyingTokenBalanceAfterDeposit).to.be.gte(underlyingTokenBalance.sub(setMaxDepositAmount));
+
+    // All withdraw after some deposit
+    await this.testDeFiAdapter.testGetWithdrawAllCodes(
+      underlyingToken,
+      pool,
+      this.quickSwapPoolAdapter.address,
+      getOverrideOptions(),
+    );
+
+    // assert whether deposit code when underlying amount is 0
+    await this.testDeFiAdapter.testGetDepositSomeCodes(
+      underlyingToken,
+      pool,
+      this.quickSwapPoolAdapter.address,
+      0,
+      getOverrideOptions(),
+    );
+    // assert whether withdraw code when lpToken amount is 0
+    await this.testDeFiAdapter.testGetWithdrawSomeCodes(
+      underlyingToken,
+      pool,
+      this.quickSwapPoolAdapter.address,
+      0,
+      getOverrideOptions(),
+    );
+
     // 6. Coverage Test Fail case
+    // asserts whether the function caller is this contract's adjuster or not
     await expect(
       this.quickSwapPoolAdapter
         .connect(this.qsigners.admin)
@@ -293,28 +380,17 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
           getOverrideOptions(),
         ),
     ).to.be.revertedWith("Not adjuster");
+    // asserts whether the function caller is this contract's adjuster or not
     await expect(
       this.quickSwapPoolAdapter.connect(this.qsigners.admin).setMaxDepositPoolPct(pool, 1000, getOverrideOptions()),
     ).to.be.revertedWith("Not adjuster");
+    // asserts whether the function caller is this contract's adjuster or not
     await expect(
       this.quickSwapPoolAdapter.connect(this.qsigners.admin).setMaxDepositProtocolPct(1000, getOverrideOptions()),
     ).to.be.revertedWith("Not adjuster");
+    // asserts whether the function caller is this contract's adjuster or not
     await expect(
       this.quickSwapPoolAdapter.connect(this.qsigners.admin).setMaxDepositProtocolMode(0, getOverrideOptions()),
     ).to.be.revertedWith("Not adjuster");
-    await this.testDeFiAdapter.testGetDepositSomeCodes(
-      underlyingToken,
-      pool,
-      this.quickSwapPoolAdapter.address,
-      0,
-      getOverrideOptions(),
-    );
-    await this.testDeFiAdapter.testGetWithdrawSomeCodes(
-      underlyingToken,
-      pool,
-      this.quickSwapPoolAdapter.address,
-      0,
-      getOverrideOptions(),
-    );
   }).timeout(100000);
 }
