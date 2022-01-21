@@ -134,7 +134,6 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
     /**
      * @inheritdoc IAdapter
      */
-    // TODO: true/false?
     function canStake(address) public pure override returns (bool) {
         return false;
     }
@@ -142,7 +141,6 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
     /**
      * @inheritdoc IAdapter
      */
-    // TODO: How about Ethereum/MATIC?
     function getDepositSomeCodes(
         address payable _vault,
         address _underlyingToken,
