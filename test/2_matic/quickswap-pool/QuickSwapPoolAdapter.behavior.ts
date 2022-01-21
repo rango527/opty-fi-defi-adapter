@@ -2,6 +2,7 @@ import hre from "hardhat";
 import chai, { expect } from "chai";
 import { solidity } from "ethereum-waffle";
 import { Network } from "@ethersproject/networks";
+import { getAddress } from "ethers/lib/utils";
 import { getOverrideOptions } from "../../utils";
 import { ADDRESS, ABI } from "../quickSwapFactory";
 import { TOKEN_ABI } from "../token.abi";
@@ -184,10 +185,11 @@ export function shouldBehaveLikeQuickSwapPoolAdapter(
     const canStake = await this.quickSwapPoolAdapter.canStake(pool);
     expect(canStake).to.be.eq(false);
 
-    // 5.3 assert whether lpToken address is same or not with rewardToken address
+    // 5.3 assert whether lpToken address and rewardToken address is correct or not
     const getLiquidityPoolToken = await this.quickSwapPoolAdapter.getLiquidityPoolToken(underlyingToken, pool);
+    expect(getLiquidityPoolToken).to.be.eq(pool);
     const getRewardToken = await this.quickSwapPoolAdapter.getRewardToken(pool);
-    expect(getLiquidityPoolToken).to.be.eq(getRewardToken);
+    expect(getRewardToken).to.be.eq(getAddress("0x0000000000000000000000000000000000000000"));
 
     // 5.4 assert whether deposit amount is correct or not when deposit amount is more than max deposit amount
     // set maxDepositAmount is 0.01

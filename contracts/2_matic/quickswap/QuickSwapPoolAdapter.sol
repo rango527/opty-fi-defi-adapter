@@ -341,8 +341,8 @@ contract QuickSwapPoolAdapter is IAdapter, IAdapterInvestLimit {
     /**
      * @inheritdoc IAdapter
      */
-    function getRewardToken(address _liquidityPool) public pure override returns (address) {
-        return _liquidityPool;
+    function getRewardToken(address) public pure override returns (address) {
+        return address(0);
     }
 
     /**
