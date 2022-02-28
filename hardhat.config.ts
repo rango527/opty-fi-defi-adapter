@@ -51,6 +51,17 @@ if (!SKIP_LOAD) {
   });
   require("./tasks/accounts");
   require("./tasks/clean");
+
+  ["3_avalanche"].forEach(folder => {
+    const tasksPath = join(__dirname, "tasks", folder);
+    fs.readdirSync(tasksPath)
+      .filter(pth => pth.includes(".ts"))
+      .forEach(task => {
+        require(`${tasksPath}/${task}`);
+      });
+  });
+  require("./tasks/accounts");
+  require("./tasks/clean");
 }
 
 const getCommonNetworkConfig = (networkName: eNetwork): NetworkUserConfig | undefined => ({
