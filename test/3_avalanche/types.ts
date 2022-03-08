@@ -9,10 +9,7 @@ export interface Signers {
   owner: SignerWithAddress;
   deployer: SignerWithAddress;
   alice: SignerWithAddress;
-  bob: SignerWithAddress;
-  charlie: SignerWithAddress;
-  dave: SignerWithAddress;
-  eve: SignerWithAddress;
+  riskOperator: SignerWithAddress;
   daiWhale: SignerWithAddress;
   usdtWhale: SignerWithAddress;
   usdcWhale: SignerWithAddress;

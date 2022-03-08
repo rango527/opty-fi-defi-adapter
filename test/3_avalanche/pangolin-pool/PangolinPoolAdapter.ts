@@ -9,7 +9,7 @@ import { Signers } from "../types";
 import { shouldBehaveLikePangolinPoolAdapter } from "./PangolinPoolAdapter.behavior";
 import { default as tokens } from "../tokens.json";
 
-const { deployContract } = hre.waffle;
+const { deployContract, deployMockContract } = hre.waffle;
 
 const assetPairs = [
   ["USDC", "USDC.e"],
@@ -71,6 +71,7 @@ describe("Unit tests", function () {
     this.asigners.owner = signers[1];
     this.asigners.deployer = signers[2];
     this.asigners.alice = signers[3];
+    this.asigners.riskOperator = signers[4];
 
     this.asigners.daiWhale = await hre.ethers.getSigner(DAI_WHALE);
     this.asigners.usdtWhale = await hre.ethers.getSigner(USDT_WHALE);
@@ -96,10 +97,19 @@ describe("Unit tests", function () {
       await deployContract(this.asigners.deployer, testDeFiAdapterArtifact, [], getOverrideOptions())
     );
 
+    const registryArtifact: Artifact = await hre.artifacts.readArtifact("IAdapterRegistryBase");
+    this.mockRegistry = await deployMockContract(this.asigners.deployer, registryArtifact.abi);
+    await this.mockRegistry.mock.getRiskOperator.returns(this.asigners.riskOperator.address);
+
     // deploy Pangolin Finance Adapter
     const pangolinAdapterArtifact: Artifact = await hre.artifacts.readArtifact("PangolinPoolAdapter");
     this.pangolinPoolAdapter = <PangolinPoolAdapter>(
-      await deployContract(this.asigners.deployer, pangolinAdapterArtifact, [], getOverrideOptions())
+      await deployContract(
+        this.asigners.deployer,
+        pangolinAdapterArtifact,
+        [this.mockRegistry.address],
+        getOverrideOptions(),
+      )
     );
 
     // fund the whale's wallet with gas

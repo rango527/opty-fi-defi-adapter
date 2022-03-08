@@ -36,9 +36,11 @@ export function shouldBehaveLikePangolinPoolAdapter(token1: string, token2: stri
     const tokenInstance = new hre.ethers.Contract(underlyingToken, TOKEN_ABI, defaultProvider);
     const decimals = await tokenInstance.decimals();
 
-    await this.pangolinPoolAdapter.connect(this.asigners.deployer).setMaxDepositProtocolMode(0, getOverrideOptions());
     await this.pangolinPoolAdapter
-      .connect(this.asigners.deployer)
+      .connect(this.asigners.riskOperator)
+      .setMaxDepositProtocolMode(0, getOverrideOptions());
+    await this.pangolinPoolAdapter
+      .connect(this.asigners.riskOperator)
       .setMaxDepositAmount(pool, underlyingToken, hre.ethers.utils.parseUnits("10000", decimals), getOverrideOptions());
 
     // 1. deposit some underlying tokens
@@ -198,7 +200,7 @@ export function shouldBehaveLikePangolinPoolAdapter(token1: string, token2: stri
     // set maxDepositAmount is 0.01
     let setMaxDepositAmount = hre.ethers.utils.parseUnits("0.01", decimals);
     await this.pangolinPoolAdapter
-      .connect(this.asigners.deployer)
+      .connect(this.asigners.riskOperator)
       .setMaxDepositAmount(pool, underlyingToken, setMaxDepositAmount, getOverrideOptions());
     underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
       underlyingToken,
@@ -217,12 +219,14 @@ export function shouldBehaveLikePangolinPoolAdapter(token1: string, token2: stri
     expect(underlyingTokenBalanceAfterDeposit).to.be.gte(underlyingTokenBalance.sub(setMaxDepositAmount));
 
     // set maxDepositProtocolMode is Pct mode
-    await this.pangolinPoolAdapter.connect(this.asigners.deployer).setMaxDepositProtocolMode(1, getOverrideOptions());
+    await this.pangolinPoolAdapter
+      .connect(this.asigners.riskOperator)
+      .setMaxDepositProtocolMode(1, getOverrideOptions());
 
     // 5.5 assert whether deposit amount is correct or not when deposit amount is less than max deposit pool amount
     // set max deposit pool percent is 10%
     await this.pangolinPoolAdapter
-      .connect(this.asigners.deployer)
+      .connect(this.asigners.riskOperator)
       .setMaxDepositPoolPct(pool, 1000, getOverrideOptions());
     underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
       underlyingToken,
@@ -251,7 +255,9 @@ export function shouldBehaveLikePangolinPoolAdapter(token1: string, token2: stri
 
     // 5.6 assert whether deposit amount is correct or not when deposit amount is more than max deposit pool amount
     // set max deposit pool percent is 0.01%
-    await this.pangolinPoolAdapter.connect(this.asigners.deployer).setMaxDepositPoolPct(pool, 1, getOverrideOptions());
+    await this.pangolinPoolAdapter
+      .connect(this.asigners.riskOperator)
+      .setMaxDepositPoolPct(pool, 1, getOverrideOptions());
     underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
       underlyingToken,
       this.testDeFiAdapter.address,
@@ -279,9 +285,13 @@ export function shouldBehaveLikePangolinPoolAdapter(token1: string, token2: stri
 
     // 5.7 assert whether deposit amount is correct or not when maxDepositPoolPct and maxDepositProtocolPct are 0%
     // set maxDepositPoolPct is 0%
-    await this.pangolinPoolAdapter.connect(this.asigners.deployer).setMaxDepositPoolPct(pool, 0, getOverrideOptions());
+    await this.pangolinPoolAdapter
+      .connect(this.asigners.riskOperator)
+      .setMaxDepositPoolPct(pool, 0, getOverrideOptions());
     // set maxDepositProtocolPct is 0%
-    await this.pangolinPoolAdapter.connect(this.asigners.deployer).setMaxDepositProtocolPct(0, getOverrideOptions());
+    await this.pangolinPoolAdapter
+      .connect(this.asigners.riskOperator)
+      .setMaxDepositProtocolPct(0, getOverrideOptions());
     underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
       underlyingToken,
       this.testDeFiAdapter.address,
@@ -301,7 +311,9 @@ export function shouldBehaveLikePangolinPoolAdapter(token1: string, token2: stri
 
     // 5.8 assert whether deposit amount is correct or not when deposit amount is less than max deposit protocol amount
     // set maxDepositProtocolPct is 10%
-    await this.pangolinPoolAdapter.connect(this.asigners.deployer).setMaxDepositProtocolPct(1000, getOverrideOptions());
+    await this.pangolinPoolAdapter
+      .connect(this.asigners.riskOperator)
+      .setMaxDepositProtocolPct(1000, getOverrideOptions());
     underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
       underlyingToken,
       this.testDeFiAdapter.address,
@@ -328,7 +340,9 @@ export function shouldBehaveLikePangolinPoolAdapter(token1: string, token2: stri
 
     // 5.9 assert whether deposit amount is correct or not when deposit amount is more than max deposit protocol amount
     // set maxDepositProtocolPct is 1%
-    await this.pangolinPoolAdapter.connect(this.asigners.deployer).setMaxDepositProtocolPct(1, getOverrideOptions());
+    await this.pangolinPoolAdapter
+      .connect(this.asigners.riskOperator)
+      .setMaxDepositProtocolPct(1, getOverrideOptions());
     underlyingTokenBalance = await this.testDeFiAdapter.getERC20TokenBalance(
       underlyingToken,
       this.testDeFiAdapter.address,
@@ -382,18 +396,18 @@ export function shouldBehaveLikePangolinPoolAdapter(token1: string, token2: stri
           hre.ethers.utils.parseUnits("1000", decimals),
           getOverrideOptions(),
         ),
-    ).to.be.revertedWith("Not adjuster");
+    ).to.be.revertedWith("caller is not the riskOperator");
     // asserts whether the function caller is this contract's adjuster or not
     await expect(
       this.pangolinPoolAdapter.connect(this.asigners.admin).setMaxDepositPoolPct(pool, 1000, getOverrideOptions()),
-    ).to.be.revertedWith("Not adjuster");
+    ).to.be.revertedWith("caller is not the riskOperator");
     // asserts whether the function caller is this contract's adjuster or not
     await expect(
       this.pangolinPoolAdapter.connect(this.asigners.admin).setMaxDepositProtocolPct(1000, getOverrideOptions()),
-    ).to.be.revertedWith("Not adjuster");
+    ).to.be.revertedWith("caller is not the riskOperator");
     // asserts whether the function caller is this contract's adjuster or not
     await expect(
       this.pangolinPoolAdapter.connect(this.asigners.admin).setMaxDepositProtocolMode(0, getOverrideOptions()),
-    ).to.be.revertedWith("Not adjuster");
+    ).to.be.revertedWith("caller is not the riskOperator");
   }).timeout(100000);
 }

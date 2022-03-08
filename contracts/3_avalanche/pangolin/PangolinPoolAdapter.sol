@@ -12,6 +12,7 @@ import { IUniswapV2Pair } from "@uniswap/v2-core/contracts/interfaces/IUniswapV2
 import { IUniswapV2Factory } from "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import { Babylonian } from "@uniswap/lib/contracts/libraries/Babylonian.sol";
 import { UniswapV2Library } from "../../libraries/UniswapV2Library.sol";
+import { AdapterModifiersBase } from "../../utils/AdapterModifiersBase.sol";
 
 /**
  * @title Adapter for Pangolin pools
@@ -19,21 +20,21 @@ import { UniswapV2Library } from "../../libraries/UniswapV2Library.sol";
  * @dev Abstraction layer to Pangolin pools
  */
 
-contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit {
+contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit, AdapterModifiersBase {
     /**
      * @notice Uniswap V2 router contract address
      */
-    IUniswapV2Router02 public constant quickswapRouter = IUniswapV2Router02(0xE54Ca86531e17Ef3616d22Ca28b0D458b6C89106);
+    IUniswapV2Router02 public constant pangolinRouter = IUniswapV2Router02(0xE54Ca86531e17Ef3616d22Ca28b0D458b6C89106);
     IUniswapV2Factory public constant factoryRouter = IUniswapV2Factory(0xefa94DE7a4656D787667C749f7E1223D71E9FD88);
     mapping(address => mapping(address => uint256)) public maxDepositAmount;
     mapping(address => uint256) public maxDepositPoolPct;
     uint256 public maxDepositProtocolPct;
     MaxExposure public maxDepositProtocolMode;
-    address public adjuster;
     uint256 public constant DENOMINATOR = 10000;
 
-    constructor() {
-        adjuster = msg.sender;
+    constructor(address _registry) AdapterModifiersBase(_registry) {
+        maxDepositProtocolMode = MaxExposure.Pct;
+        maxDepositProtocolPct = uint256(10000); // 100% (basis points)
     }
 
     /**
@@ -152,7 +153,7 @@ contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit {
             _codes = new bytes[](6);
             _codes[0] = abi.encode(
                 _underlyingToken,
-                abi.encodeWithSignature("approve(address,uint256)", quickswapRouter, uint256(0))
+                abi.encodeWithSignature("approve(address,uint256)", pangolinRouter, uint256(0))
             );
             address toToken;
             uint256 swapInAmount;
@@ -170,13 +171,13 @@ contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit {
             }
             _codes[1] = abi.encode(
                 _underlyingToken,
-                abi.encodeWithSignature("approve(address,uint256)", quickswapRouter, _amount)
+                abi.encodeWithSignature("approve(address,uint256)", pangolinRouter, _amount)
             );
             address[] memory path = new address[](2);
             path[0] = _underlyingToken;
             path[1] = toToken;
             _codes[2] = abi.encode(
-                quickswapRouter,
+                pangolinRouter,
                 abi.encodeWithSignature(
                     "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)",
                     swapInAmount,
@@ -188,14 +189,14 @@ contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit {
             );
             _codes[3] = abi.encode(
                 toToken,
-                abi.encodeWithSignature("approve(address,uint256)", quickswapRouter, uint256(0))
+                abi.encodeWithSignature("approve(address,uint256)", pangolinRouter, uint256(0))
             );
             _codes[4] = abi.encode(
                 toToken,
-                abi.encodeWithSignature("approve(address,uint256)", quickswapRouter, swapOutAmount)
+                abi.encodeWithSignature("approve(address,uint256)", pangolinRouter, swapOutAmount)
             );
             _codes[5] = abi.encode(
-                quickswapRouter,
+                pangolinRouter,
                 abi.encodeWithSignature(
                     "addLiquidity(address,address,uint256,uint256,uint256,uint256,address,uint256)",
                     _underlyingToken,
@@ -224,11 +225,11 @@ contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit {
             _codes = new bytes[](6);
             _codes[0] = abi.encode(
                 _liquidityPool,
-                abi.encodeWithSignature("approve(address,uint256)", quickswapRouter, 0)
+                abi.encodeWithSignature("approve(address,uint256)", pangolinRouter, 0)
             );
             _codes[1] = abi.encode(
                 _liquidityPool,
-                abi.encodeWithSignature("approve(address,uint256)", quickswapRouter, _shares)
+                abi.encodeWithSignature("approve(address,uint256)", pangolinRouter, _shares)
             );
             address toToken = IUniswapV2Pair(_liquidityPool).token1();
             (uint256 outAmountA, uint256 outAmountB, ) = IUniswapV2Pair(_liquidityPool).getReserves();
@@ -240,7 +241,7 @@ contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit {
                 (outAmountA, outAmountB) = (outAmountB, outAmountA);
             }
             _codes[2] = abi.encode(
-                quickswapRouter,
+                pangolinRouter,
                 abi.encodeWithSignature(
                     "removeLiquidity(address,address,uint256,uint256,uint256,address,uint256)",
                     _underlyingToken,
@@ -255,13 +256,13 @@ contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit {
             _codes[3] = abi.encode(toToken, abi.encodeWithSignature("approve(address,uint256)", _liquidityPool, 0));
             _codes[4] = abi.encode(
                 toToken,
-                abi.encodeWithSignature("approve(address,uint256)", quickswapRouter, outAmountB)
+                abi.encodeWithSignature("approve(address,uint256)", pangolinRouter, outAmountB)
             );
             address[] memory path = new address[](2);
             path[0] = toToken;
             path[1] = _underlyingToken;
             _codes[5] = abi.encode(
-                quickswapRouter,
+                pangolinRouter,
                 abi.encodeWithSignature(
                     "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)",
                     outAmountB,
@@ -352,8 +353,7 @@ contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit {
         address _liquidityPool,
         address _underlyingToken,
         uint256 _maxDepositAmount
-    ) external override {
-        require(adjuster == msg.sender, "Not adjuster");
+    ) external override onlyRiskOperator {
         maxDepositAmount[_liquidityPool][_underlyingToken] = _maxDepositAmount;
         emit LogMaxDepositAmount(_maxDepositAmount, msg.sender);
     }
@@ -361,8 +361,11 @@ contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit {
     /**
      * @inheritdoc IAdapterInvestLimit
      */
-    function setMaxDepositPoolPct(address _liquidityPool, uint256 _maxDepositPoolPct) external override {
-        require(adjuster == msg.sender, "Not adjuster");
+    function setMaxDepositPoolPct(address _liquidityPool, uint256 _maxDepositPoolPct)
+        external
+        override
+        onlyRiskOperator
+    {
         maxDepositPoolPct[_liquidityPool] = _maxDepositPoolPct;
         emit LogMaxDepositPoolPct(_maxDepositPoolPct, msg.sender);
     }
@@ -370,8 +373,7 @@ contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit {
     /**
      * @inheritdoc IAdapterInvestLimit
      */
-    function setMaxDepositProtocolPct(uint256 _maxDepositProtocolPct) external override {
-        require(adjuster == msg.sender, "Not adjuster");
+    function setMaxDepositProtocolPct(uint256 _maxDepositProtocolPct) external override onlyRiskOperator {
         maxDepositProtocolPct = _maxDepositProtocolPct;
         emit LogMaxDepositProtocolPct(_maxDepositProtocolPct, msg.sender);
     }
@@ -379,8 +381,7 @@ contract PangolinPoolAdapter is IAdapter, IAdapterInvestLimit {
     /**
      * @inheritdoc IAdapterInvestLimit
      */
-    function setMaxDepositProtocolMode(MaxExposure _mode) external override {
-        require(adjuster == msg.sender, "Not adjuster");
+    function setMaxDepositProtocolMode(MaxExposure _mode) external override onlyRiskOperator {
         maxDepositProtocolMode = _mode;
         emit LogMaxDepositProtocolMode(_mode, msg.sender);
     }
